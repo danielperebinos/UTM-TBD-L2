@@ -1,0 +1,15 @@
+services:
+  tbd_mongo:
+    image: mongo:latest
+    container_name: tbd_mongo
+    ports:
+      - "27020:27017"
+    volumes:
+      - tbd_mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+
+volumes:
+  tbd_mongo_data:
+    name: tbd_mongo_data
