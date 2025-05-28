@@ -1,92 +1,67 @@
 import hashlib
-
 import pandas as pd
-from bson import ObjectId
 
-# Load the CSV
-df = pd.read_csv("datasets/Hotel_Reviews.csv")
+# Load the dataset
+df = pd.read_csv("datasets/bank_transactions.csv")
 
-# Convert generated hotel_id string to actual ObjectId format for MongoDB compatibility
-# First, map hotel identifiers to ObjectIds
-unique_hotels = df[["Hotel_Name", "Hotel_Address"]].drop_duplicates().copy()
-unique_hotels["object_id"] = unique_hotels.apply(
-    lambda row: ObjectId(hashlib.md5(f"{row['Hotel_Name']}_{row['Hotel_Address']}".encode()).hexdigest()[:24]),
+# Map customer identifiers to unique ObjectId-like hashes
+unique_customers = df[["CustomerID", "CustGender", "CustLocation"]].drop_duplicates().copy()
+unique_customers["object_id"] = unique_customers.apply(
+    lambda row: hashlib.md5(f"{row['CustomerID']}_{row['CustGender']}_{row['CustLocation']}".encode()).hexdigest()[:24],
     axis=1
 )
 
 # Merge back the ObjectId to the main DataFrame
-df = df.merge(unique_hotels, on=["Hotel_Name", "Hotel_Address"], how="left")
+df = df.merge(unique_customers, on=["CustomerID", "CustGender", "CustLocation"], how="left")
 
-# Rebuild HOTELS collection
-hotels = df[[
-    "Hotel_Name", "Hotel_Address", "Average_Score", "Total_Number_of_Reviews", "lat", "lng", "object_id"
-]].drop_duplicates().copy()
+# Rebuild CUSTOMERS collection
+customers = df[["CustomerID", "CustGender", "CustLocation", "CustAccountBalance", "object_id"]].drop_duplicates().copy()
 
-hotels.rename(columns={
-    "Hotel_Name": "name",
-    "Hotel_Address": "address",
-    "Average_Score": "average_score",
-    "Total_Number_of_Reviews": "total_number_of_reviews",
+customers.rename(columns={
+    "CustomerID": "customer_id",
+    "CustGender": "gender",
+    "CustLocation": "location",
+    "CustAccountBalance": "account_balance",
     "object_id": "_id"
 }, inplace=True)
-hotels = hotels[["_id", "name", "address", "average_score", "total_number_of_reviews", "lat", "lng"]]
 
-# Rebuild REVIEWS collection with embedded reviewer and ObjectId reference to hotel
-reviews = df[[
-    "Review_Date", "Positive_Review", "Negative_Review",
-    "Review_Total_Positive_Word_Counts", "Review_Total_Negative_Word_Counts",
-    "Reviewer_Score", "Tags", "days_since_review",
-    "Reviewer_Nationality", "Total_Number_of_Reviews_Reviewer_Has_Given",
-    "object_id"
+customers = customers[["_id", "customer_id", "gender", "location", "account_balance"]]
+
+# Rebuild TRANSACTIONS collection with embedded customer reference
+transactions = df[[
+    "TransactionID", "TransactionDate", "TransactionTime", "TransactionAmount (INR)", "object_id"
 ]].copy()
 
 
-def generate_full_review_id(row):
+# Generate full transaction ID
+def generate_full_transaction_id(row):
     fields = [
         str(row["object_id"]),
-        row["Review_Date"],
-        row["Positive_Review"],
-        row["Negative_Review"],
-        str(row["Review_Total_Positive_Word_Counts"]),
-        str(row["Review_Total_Negative_Word_Counts"]),
-        str(row["Reviewer_Score"]),
-        row["Tags"],
-        row["days_since_review"],
-        row["Reviewer_Nationality"],
-        str(row["Total_Number_of_Reviews_Reviewer_Has_Given"])
+        row["TransactionDate"],
+        str(row["TransactionAmount (INR)"]),
+        str(row["TransactionTime"])
     ]
     return hashlib.md5("_".join(fields).encode()).hexdigest()
 
 
-reviews["_id"] = reviews.apply(generate_full_review_id, axis=1)
-reviews["hotel_id"] = reviews["object_id"]
+transactions["_id"] = transactions.apply(generate_full_transaction_id, axis=1)
+transactions["customer_id"] = transactions["object_id"]
 
-# Embed reviewer
-reviews["reviewer"] = reviews.apply(lambda row: {
-    "nationality": row["Reviewer_Nationality"],
-    "total_number_of_reviews_by_reviewer": row["Total_Number_of_Reviews_Reviewer_Has_Given"]
-}, axis=1)
-
-# Final formatting
-reviews.rename(columns={
-    "Review_Date": "review_date",
-    "Positive_Review": "positive_review",
-    "Negative_Review": "negative_review",
-    "Review_Total_Positive_Word_Counts": "review_total_positive_word_counts",
-    "Review_Total_Negative_Word_Counts": "review_total_negative_word_counts",
-    "Reviewer_Score": "reviewer_score",
-    "Tags": "tags"
+# Final formatting for transactions
+transactions.rename(columns={
+    "TransactionID": "transaction_id",
+    "TransactionDate": "transaction_date",
+    "TransactionAmount (INR)": "transaction_amount",
+    "TransactionTime": "transaction_time"
 }, inplace=True)
 
-reviews = reviews[[
-    "_id", "hotel_id", "review_date", "positive_review", "negative_review",
-    "review_total_positive_word_counts", "review_total_negative_word_counts",
-    "reviewer_score", "tags", "days_since_review", "reviewer"
-]]
+transactions = transactions[
+    ["_id", "customer_id", "transaction_id", "transaction_date", "transaction_amount", "transaction_time"]]
 
 # Convert ObjectId fields to JSON serializable format
-hotels["_id"] = hotels["_id"].apply(lambda oid: {"$oid": str(oid)})
-reviews["hotel_id"] = reviews["hotel_id"].apply(lambda oid: {"$oid": str(oid)})
+customers["_id"] = customers["_id"].apply(lambda oid: {"$oid": str(oid)})
+transactions["customer_id"] = transactions["customer_id"].apply(lambda oid: {"$oid": str(oid)})
 
-hotels.to_json("datasets/hotels.json", orient="records", indent=2)
-reviews.to_json("datasets/reviews.json", orient="records", indent=2)
+# Save to JSON files
+customers.to_json("datasets/customers.json", orient="records", indent=2)
+transactions.to_json("datasets/transactions.json", orient="records", indent=2)

@@ -1,207 +1,184 @@
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 from pymongo import MongoClient
 
 # MongoDB connection
-client = MongoClient("mongodb://root:root@localhost:27020")
-db = client["hotels"]
-hotels_col = db["hotels"]
-reviews_col = db["reviews"]
+client = MongoClient("mongodb://root:root@localhost:27020")  # Adjust MongoDB connection URL
+db = client["bank"]
+customers_col = db["customers"]
+transactions_col = db["transactions"]
 
-st.set_page_config(page_title="Hotel Reviews App", layout="wide")
+st.set_page_config(page_title="Bank Customer Dashboard", layout="wide")
 
-st.title("🏨 Hotel Reviews Dashboard")
+st.title("🏦 Bank Customer Dashboard")
 
-tab1, tab2, tab3 = st.tabs(["✍️ Submit a Review", "📊 Hotel Statistics", "🔍 Explore Reviews"])
+tab1, tab2, tab3 = st.tabs(["✍️ Add Data", "📊 View Data", "🔍 Search and Update"])
 
 # =====================
-# 1. SUBMIT REVIEW
+# 1. ADD DATA
 # =====================
 with tab1:
-    st.subheader("Add a New Review")
+    st.subheader("Add a New Customer and Transaction")
 
-    hotels = list(hotels_col.find({}, {"_id": 1, "name": 1}))
-    hotel_names = {h["name"]: h["_id"] for h in hotels}
-    selected_hotel = st.selectbox("Select a Hotel", options=list(hotel_names.keys()))
+    # Add customer details
+    with st.form("add_customer"):
+        customer_id = st.text_input("Customer ID")
+        gender = st.selectbox("Gender", ["Male", "Female"])
+        location = st.text_input("Location")
+        account_balance = st.number_input("Account Balance", min_value=0.0, step=100.0)
+        submit_customer = st.form_submit_button("Add Customer")
 
-    with st.form("add_review"):
-        nationality = st.text_input("Nationality")
-        total_reviews = st.number_input("Total Reviews by User", min_value=1, step=1)
-        score = st.slider("Review Score", 0.0, 10.0, 7.5, step=0.1)
-        positive = st.text_area("Positive Review")
-        negative = st.text_area("Negative Review")
-        submit = st.form_submit_button("Submit Review")
-
-        if submit:
-            reviews_col.insert_one({
-                "hotel_id": hotel_names[selected_hotel],
-                "reviewer_score": score,
-                "positive_review": positive,
-                "negative_review": negative,
-                "reviewer": {
-                    "nationality": nationality,
-                    "total_number_of_reviews_by_reviewer": total_reviews
-                }
+        if submit_customer:
+            customers_col.insert_one({
+                "customer_id": customer_id,
+                "gender": gender,
+                "location": location,
+                "account_balance": account_balance
             })
-            st.success("✅ Review successfully submitted!")
+            st.success("✅ Customer successfully added!")
+
+    # Add transaction details
+    with st.form("add_transaction"):
+        transaction_id = st.text_input("Transaction ID")
+        customer_id = st.selectbox("Select Customer", options=[c["customer_id"] for c in customers_col.find()])
+        transaction_date = st.date_input("Transaction Date")
+        transaction_time = st.time_input("Transaction Time")
+        transaction_amount = st.number_input("Transaction Amount", min_value=0.0, step=100.0)
+        submit_transaction = st.form_submit_button("Add Transaction")
+
+        if submit_transaction:
+            customer = customers_col.find_one({"customer_id": customer_id})
+            if customer:
+                transactions_col.insert_one({
+                    "transaction_id": transaction_id,
+                    "transaction_date": transaction_date.isoformat(),
+                    "transaction_time": transaction_time.isoformat(),
+                    "transaction_amount": transaction_amount,
+                    "customer_id": customer["_id"]  # Reference to customer _id
+                })
+                st.success("✅ Transaction successfully added!")
 
 # =====================
-# 2. STATISTICS
+# 2. VIEW DATA
 # =====================
 with tab2:
-    st.subheader("Hotel Review Statistics")
+    st.subheader("View and Filter Customers and Transactions")
 
-    # --- Filter row (all filters in one row) ---
-    col_f1, col_f2, col_f3 = st.columns(3)
+    # ----- Customers Section -----
+    st.markdown("### 🧍 Customers")
 
-    with col_f1:
-        nationalities = reviews_col.distinct("reviewer.nationality")
-        selected_nat = st.selectbox("Filter by reviewer nationality", options=["All"] + sorted(nationalities))
+    # Filter options for customers
+    customer_gender = st.selectbox("Filter by Gender", options=["All", "Male", "Female"])
+    customer_location = st.text_input("Filter by Location (optional)")
+    customer_page = st.number_input("Customer Page", min_value=1, value=1)
+    customer_page_size = 50
 
-    with col_f2:
-        min_score, max_score = st.slider(
-            "Filter by score range",
-            min_value=0.0, max_value=10.0,
-            value=(0.0, 10.0), step=0.1
-        )
+    # Build customer query
+    customer_query = {}
+    if customer_gender != "All":
+        customer_query["gender"] = customer_gender
+    if customer_location:
+        customer_query["location"] = {"$regex": customer_location, "$options": "i"}
 
-    with col_f3:
-        hotel_names = hotels_col.distinct("name")
-        selected_hotel = st.selectbox("Filter by hotel", options=["All"] + sorted(hotel_names))
+    # Fetch paginated customers
+    customer_cursor = customers_col.find(customer_query).skip((customer_page - 1) * customer_page_size).limit(customer_page_size)
+    customers_df = pd.DataFrame(list(customer_cursor))
 
-    # --- Build match stage ---
-    match_conditions = {}
+    if not customers_df.empty:
+        customers_df["_id"] = customers_df["_id"].apply(lambda oid: str(oid))
+        st.dataframe(customers_df)
+    else:
+        st.info("No customers found for selected filters.")
 
-    if selected_nat != "All":
-        match_conditions["reviewer.nationality"] = selected_nat
+    # ----- Transactions Section -----
+    st.markdown("### 💳 Transactions")
 
-    if selected_hotel != "All":
-        hotel = hotels_col.find_one({"name": selected_hotel}, {"_id": 1})
-        if hotel:
-            match_conditions["hotel_id"] = hotel["_id"]
+    # Filter options for transactions
+    transaction_type = st.text_input("Filter by Transaction Type (optional)")
+    transaction_min_amount = st.number_input("Minimum Amount", min_value=0.0, value=0.0)
+    transaction_page = st.number_input("Transaction Page", min_value=1, value=1, key="txn_page")
+    transaction_page_size = 50
 
-    match_conditions["reviewer_score"] = {"$gte": min_score, "$lte": max_score}
+    # Build transaction query
+    transaction_query = {"transaction_amount": {"$gte": transaction_min_amount}}
+    if transaction_type:
+        transaction_query["transaction_type"] = {"$regex": transaction_type, "$options": "i"}
 
-    pipeline = []
-    if match_conditions:
-        pipeline.append({"$match": match_conditions})
+    # Fetch paginated transactions
+    transaction_cursor = transactions_col.find(transaction_query).skip((transaction_page - 1) * transaction_page_size).limit(transaction_page_size)
+    transactions_df = pd.DataFrame(list(transaction_cursor))
 
-    pipeline.extend([
-        {
-            "$lookup": {
-                "from": "hotels",
-                "localField": "hotel_id",
-                "foreignField": "_id",
-                "as": "hotel"
-            }
-        },
-        {"$unwind": "$hotel"},
-        {
-            "$group": {
-                "_id": "$hotel.name",
-                "avg_score": {"$avg": "$reviewer_score"},
-                "count": {"$sum": 1}
-            }
-        },
-        {"$sort": {"avg_score": -1}}
-    ])
+    if not transactions_df.empty:
+        transactions_df["_id"] = transactions_df["_id"].apply(lambda oid: str(oid))
+        transactions_df["customer_id"] = transactions_df["customer_id"].apply(lambda oid: str(oid))
+        st.dataframe(transactions_df)
+    else:
+        st.info("No transactions found for selected filters.")
 
-    stats = list(reviews_col.aggregate(pipeline))
-    df = pd.DataFrame(stats)
-    df.rename(columns={"_id": "Hotel", "avg_score": "Average Score", "count": "No. of Reviews"}, inplace=True)
 
-    # --- Pagination logic ---
-    page_size = 20
-    total_items = len(df)
-    total_pages = max((total_items + page_size - 1) // page_size, 1)
-
-    page_start, page_end = 0, page_size
-    page = 1
-
-    if total_items > 0:
-        page = st.number_input(
-            label="Page number",
-            min_value=1,
-            max_value=total_pages,
-            step=1,
-            value=1,
-            key="pagination"
-        )
-        page_start = (page - 1) * page_size
-        page_end = page_start + page_size
-
-    paged_df = df.iloc[page_start:page_end]
-
-    # --- Display data + plot ---
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.write(f"📋 **Top Hotels by Score** (Page {page}/{total_pages})")
-        st.dataframe(paged_df, use_container_width=True)
-
-    with col2:
-        st.write("📈 **Average Score Distribution (this page only)**")
-        fig, ax = plt.subplots()
-        if paged_df.empty:
-            ax.text(0.5, 0.5, "No data available", ha='center', va='center', fontsize=20)
-        else:
-            ax.barh(paged_df["Hotel"], paged_df["Average Score"])
-        ax.invert_yaxis()
-        ax.set_xlabel("Average Score")
-        st.pyplot(fig)
-
-    # --- Pagination UI under table ---
-    st.markdown("---")
-    st.caption(f"Showing {min(page_end, total_items)} of {total_items} hotels")
-
+# =====================
+# 3. SEARCH AND UPDATE DATA
+# =====================
 with tab3:
-    st.subheader("Explore User Reviews")
+    st.subheader("Search and Update Data")
 
-    # --- Filter row ---
-    colf1, colf2 = st.columns(2)
+    # Search for a customer to update
+    search_customer_id = st.text_input("Search Customer by ID")
+    if search_customer_id:
+        customer = customers_col.find_one({"customer_id": search_customer_id})
+        if customer:
+            st.write(f"Found Customer: {customer}")
+            with st.form("update_customer"):
+                new_balance = st.number_input("Update Account Balance", value=customer["account_balance"], step=100.0)
+                submit_update_customer = st.form_submit_button("Update Customer")
 
-    with colf1:
-        selected_hotel = st.selectbox("Select hotel", ["All"] + sorted(hotels_col.distinct("name")))
-        selected_nat = st.selectbox("Select nationality",
-                                    ["All"] + sorted(reviews_col.distinct("reviewer.nationality")))
+                if submit_update_customer:
+                    customers_col.update_one(
+                        {"_id": customer["_id"]},
+                        {"$set": {"account_balance": new_balance}}
+                    )
+                    st.success(f"✅ Customer {search_customer_id} updated!")
+        else:
+            st.error("Customer not found!")
 
-    with colf2:
-        search_term = st.text_input("Search in reviews (keywords)")
-        score_range = st.slider("Score filter", 0.0, 10.0, (0.0, 10.0), 0.1)
+    # Search for a transaction to update
+    search_transaction_id = st.text_input("Search Transaction by ID")
+    if search_transaction_id:
+        transaction = transactions_col.find_one({"transaction_id": search_transaction_id})
+        if transaction:
+            st.write(f"Found Transaction: {transaction}")
+            with st.form("update_transaction"):
+                new_amount = st.number_input("Update Transaction Amount", value=transaction["transaction_amount"],
+                                             step=100.0)
+                submit_update_transaction = st.form_submit_button("Update Transaction")
 
-    # --- Build dynamic query ---
-    query = {
-        "reviewer_score": {"$gte": score_range[0], "$lte": score_range[1]}
-    }
+                if submit_update_transaction:
+                    transactions_col.update_one(
+                        {"_id": transaction["_id"]},
+                        {"$set": {"transaction_amount": new_amount}}
+                    )
+                    st.success(f"✅ Transaction {search_transaction_id} updated!")
+        else:
+            st.error("Transaction not found!")
 
-    if selected_hotel != "All":
-        hotel = hotels_col.find_one({"name": selected_hotel}, {"_id": 1})
-        if hotel:
-            query["hotel_id"] = hotel["_id"]
+    # Delete a customer
+    delete_customer_id = st.text_input("Delete Customer by ID")
+    if delete_customer_id:
+        delete_customer = customers_col.find_one({"customer_id": delete_customer_id})
+        if delete_customer:
+            if st.button(f"Delete Customer {delete_customer_id}"):
+                customers_col.delete_one({"_id": delete_customer["_id"]})
+                st.success(f"✅ Customer {delete_customer_id} deleted!")
+        else:
+            st.error("Customer not found!")
 
-    if selected_nat != "All":
-        query["reviewer.nationality"] = selected_nat
-
-    if search_term.strip():
-        query["$or"] = [
-            {"positive_review": {"$regex": search_term, "$options": "i"}},
-            {"negative_review": {"$regex": search_term, "$options": "i"}}
-        ]
-
-    # --- Fetch and display reviews ---
-    results = list(reviews_col.find(query).sort("reviewer_score", -1).limit(20))
-
-    st.markdown(f"### Found {len(results)} reviews")
-
-    for r in results:
-        with st.expander(f"⭐ {r.get('reviewer_score')} - {r['reviewer']['nationality']}"):
-            st.write(f"**Positive:** {r.get('positive_review', '-')}")
-            st.write(f"**Negative:** {r.get('negative_review', '-')}")
-            st.caption(f"Total reviews by user: {r['reviewer'].get('total_number_of_reviews_by_reviewer', 'N/A')}")
-
-            # --- Delete button ---
-            delete_key = f"delete_{r['_id']}"
-            if st.button("🗑️ Delete this review", key=delete_key):
-                reviews_col.delete_one({"_id": r["_id"]})
-                st.warning("Review deleted. Please refresh the page.")
+    # Delete a transaction
+    delete_transaction_id = st.text_input("Delete Transaction by ID")
+    if delete_transaction_id:
+        delete_transaction = transactions_col.find_one({"transaction_id": delete_transaction_id})
+        if delete_transaction:
+            if st.button(f"Delete Transaction {delete_transaction_id}"):
+                transactions_col.delete_one({"_id": delete_transaction["_id"]})
+                st.success(f"✅ Transaction {delete_transaction_id} deleted!")
+        else:
+            st.error("Transaction not found!")

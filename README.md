@@ -1,110 +1,120 @@
-# 🏨 Big Data Technologies – Hotel Reviews Dashboard
+# 🏦 Bank Customer & Transactions Dashboard
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
 [![Docker Compose](https://img.shields.io/badge/Docker--Compose-Used-green)](https://docs.docker.com/compose/)
 [![MongoDB](https://img.shields.io/badge/Database-MongoDB-brightgreen)](https://www.mongodb.com/)
 [![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-orange)](https://streamlit.io/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://opensource.org/licenses/MIT)
-
-This project was developed as part of the **Big Data Technologies** course and demonstrates a complete pipeline for
-processing, storing, and analyzing hotel reviews at scale using **MongoDB**, **Streamlit**, and **Docker**.
+[![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## 🧩 Project Structure
+## 📌 Descriere Proiect
 
-```
+Acest proiect este o aplicație demo pentru gestionarea și vizualizarea datelor bancare privind clienții și tranzacțiile
+acestora.  
+Folosește un backend MongoDB pentru stocarea datelor, o interfață Streamlit pentru interacțiunea cu utilizatorul și este
+ușor de deploy-at prin Docker Compose.
+
+---
+
+## 🧩 Structura Proiectului
+
+```plaintext
 📦 root/
- ├── compose.yaml               # Docker config for MongoDB
- ├── converter.py              # Transforms raw CSV to MongoDB-ready JSON
- ├── main.py                   # Streamlit dashboard frontend
- ├── analysis.ipynb           # Exploratory data analysis (EDA)
- └── datasets/                 # Transformed JSON data for import
-```
+ ├── compose.yaml             # Configurare Docker Compose pentru MongoDB
+ ├── converter.py            # Script de transformare CSV în JSON pregătit pentru MongoDB
+ ├── main.py                 # Dashboard Streamlit pentru gestionarea datelor
+ ├── analysis.ipynb          # Notebook pentru explorarea inițială a datelor
+ ├── README.md               # Documentația proiectului
+ └── datasets/               # Date JSON preprocesate pentru import în MongoDB
+````
 
 ---
 
-## 🛠 Technologies Used
+## 🛠 Tehnologii utilizate
 
-- **MongoDB**: NoSQL document store used for hotel and review data.
-- **Pandas**: For data manipulation and transformation.
-- **Streamlit**: For building the interactive dashboard.
-- **Docker Compose**: For easy deployment of MongoDB in a containerized environment.
-- **Matplotlib**: For visualizations embedded in Streamlit.
-- **Hashlib / ObjectId**: For deterministic and unique review and hotel identifiers.
-
----
-
-## ⚙️ Functionality Overview
-
-### 🧪 `converter.py`
-
-- Loads raw hotel review CSVs.
-- Deduplicates hotels and generates consistent MongoDB-compatible `ObjectId`s.
-- Splits data into:
-    - `hotels.json`: Clean hotel info
-    - `reviews.json`: Normalized and enriched reviews with embedded reviewer profiles
-- Saves them into the `datasets/` folder for import into MongoDB.
+* **Python 3.10+** – Limbaj de programare principal
+* **MongoDB** – Bază de date NoSQL pentru stocarea clienților și tranzacțiilor
+* **Streamlit** – Interfață web interactivă pentru vizualizare și administrare
+* **Docker Compose** – Pentru orchestrarea containerului MongoDB
+* **Pandas** – Manipularea și procesarea datelor
+* **Hashlib** – Generarea identificatorilor unici deterministici
+* **Matplotlib** – Vizualizări (în notebook și în dashboard)
 
 ---
 
-### 🧾 `compose.yaml`
+## ⚙️ Funcționalități principale
 
-- Spins up a MongoDB instance at port `27020`
-- Auto-initializes with root credentials
-- Persistent volume: `tbd_mongo_data` for data durability.
+### `converter.py`
 
----
+* Încarcă datele brute din CSV
+* Creează identificatori unici tip ObjectId pentru clienți și tranzacții
+* Generează fișiere JSON gata de importat în MongoDB:
 
-### 📊 `main.py` – Streamlit Dashboard
-
-**Includes:**
-
-1. **✍️ Submit Review**
-    - Allows new reviews to be inserted via the UI into the MongoDB collection.
-
-2. **📊 Hotel Statistics**
-    - Filters by hotel, nationality, and score range.
-    - Aggregates and ranks hotels by average score and number of reviews.
-    - Displays results with pagination and dynamic bar charts.
-
-3. **🔍 Explore Reviews**
-    - Keyword-based search with multiple filters.
-    - Display review highlights, reviewer info, and allows deletion of entries.
-
-All operations are performed live against the MongoDB backend using `pymongo`.
+    * `customers.json`
+    * `transactions.json`
 
 ---
 
-### 📈 `analysis.ipynb`
+### `compose.yaml`
 
-- Performs initial data inspection and insights.
-- Includes basic statistics, distributions, and exploratory plots.
+* Configurează și pornește un container MongoDB pe portul `27020`
+* Setează credențiale root
+* Volum persistent pentru date
 
 ---
 
-## 🚀 Running the Project
+### `main.py` – Dashboard Streamlit
 
-### 1. Launch MongoDB
+Dashboard-ul este împărțit în trei taburi principale:
+
+1. **✍️ Adăugare Date**
+
+    * Formulare pentru adăugarea de clienți noi
+    * Formulare pentru adăugarea tranzacțiilor aferente clienților existenți
+
+2. **📊 Vizualizare Date**
+
+    * Vizualizare paginată și filtrabilă pentru clienți și tranzacții
+    * Filtre după gen, locație, sumă tranzacție, tip tranzacție etc.
+
+3. **🔍 Căutare și Actualizare**
+
+    * Căutare clienți și tranzacții după ID
+    * Actualizare sold cont sau suma tranzacției
+    * Ștergere clienți și tranzacții
+
+---
+
+## 📈 Analiză și explorare date (`analysis.ipynb`)
+
+* Explorare inițială a datasetului
+* Statistici descriptive și grafice pentru datele clienților și tranzacțiilor
+
+---
+
+## 🚀 Cum rulezi proiectul
+
+### 1. Pornește MongoDB cu Docker Compose
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Preprocess Data
+### 2. Transformă datele CSV în JSON pentru import
 
 ```bash
 python converter.py
 ```
 
-### 3. Import Data into MongoDB (optional)
+### 3. (Opțional) Importă datele în MongoDB
 
 ```bash
-mongoimport --uri mongodb://root:root@localhost:27020/hotels --collection hotels --file datasets/hotels.json --jsonArray
-mongoimport --uri mongodb://root:root@localhost:27020/hotels --collection reviews --file datasets/reviews.json --jsonArray
+mongoimport --uri mongodb://root:root@localhost:27020/bank --collection customers --file datasets/customers.json --jsonArray
+mongoimport --uri mongodb://root:root@localhost:27020/bank --collection transactions --file datasets/transactions.json --jsonArray
 ```
 
-### 4. Run the Streamlit Dashboard
+### 4. Rulează dashboard-ul Streamlit
 
 ```bash
 streamlit run main.py
@@ -112,45 +122,44 @@ streamlit run main.py
 
 ---
 
-## Schema
+## 🗂 Schema colecțiilor MongoDB
 
 ```mermaid
 erDiagram
-    HOTEL ||--o{ REVIEW: has
-    REVIEWER ||--o{ REVIEW: writes
+    CUSTOMER ||--o{ TRANSACTION: owns
 
-    HOTEL {
+    CUSTOMER {
         string _id
-        string name
-        string address
-        float average_score
-        int total_number_of_reviews
-        float lat
-        float lng
+        string customer_id
+        string gender
+        string location
+        float account_balance
     }
 
-    REVIEW {
+    TRANSACTION {
         string _id
-        string hotel_id
-        string user_id
-        string review_date
-        string positive_review
-        string negative_review
-        int review_total_positive_word_counts
-        int review_total_negative_word_counts
-        float reviewer_score
-        string[] tags
-        string days_since_review
-    }
-
-    REVIEWER {
-        string nationality
-        int total_number_of_reviews_by_reviewer
+        string customer_id
+        string transaction_id
+        string transaction_date
+        float transaction_amount
+        string transaction_time
     }
 ```
 
 ---
 
-## 📄 License
+## 📄 Licență
 
-This project is licensed under the MIT License.
+Acest proiect este licențiat sub licența [MIT](https://opensource.org/licenses/MIT).
+
+---
+
+## 📸 Vizualizări
+
+![Schema colecții](schema.png)
+![Arbore decizie](decision_tree.png)
+![Exemplu grafic tranzacții](newplot.png)
+
+---
+
+*Proiect dezvoltat ca parte din cursul Big Data Technologies.*
